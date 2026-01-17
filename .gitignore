@@ -1,0 +1,78 @@
+############################
+# Java / Maven / Gradle
+############################
+target/
+out/
+*.class
+*.jar
+*.war
+*.ear
+*.log
+
+############################
+# Spring Boot
+############################
+application-*.yml
+!application-example.yml
+.springBeans
+
+############################
+# IDEs
+############################
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# VS Code
+.vscode/
+
+############################
+# OS
+############################
+.DS_Store
+Thumbs.db
+
+############################
+# Docker
+############################
+*.pid
+docker/.env
+.env
+.env.*
+
+############################
+# Test / Coverage
+############################
+coverage/
+jacoco/
+*.exec
+
+############################
+# Build tools cache
+############################
+.mvn/wrapper/maven-wrapper.jar
+.gradle/
+.gradle-cache/
+
+############################
+# Logs / Temp
+############################
+logs/
+tmp/
+*.tmp
+
+############################
+# Native / GraalVM
+############################
+native-image/
+graalvm/
+hs_err_pid*
+replay_pid*
+
+############################
+# GitHub / CI artifacts
+############################
+*.orig
+*.rej

@@ -1,0 +1,39 @@
+# syntax=docker/dockerfile:1.7
+
+# ---------- build stage ----------
+FROM maven:3.9-eclipse-temurin-25 AS build
+WORKDIR /workspace
+
+# If you have Maven Wrapper, copy it for reproducible builds:
+# COPY .mvn/ .mvn/
+# COPY mvnw .
+# RUN chmod +x mvnw
+
+COPY pom.xml .
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn -q -DskipTests dependency:go-offline
+
+COPY src ./src
+
+# Prefer using your Maven profile if you have it:
+#   mvn -Paot package
+# Otherwise:
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn -q -DskipTests -Dspring.aot.enabled=true package
+
+# ---------- runtime stage ----------
+FROM eclipse-temurin:25-jre
+WORKDIR /app
+
+RUN useradd -r -u 10001 appuser
+USER appuser
+
+COPY --from=build /workspace/target/*.jar /app/app.jar
+
+EXPOSE 8080
+
+# Keep default quiet; override at runtime if needed:
+#   docker run -e JAVA_OPTS="..." ...
+ENV JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=25 -XX:+ExitOnOutOfMemoryError"
+
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/app.jar"]

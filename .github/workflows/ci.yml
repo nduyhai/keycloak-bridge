@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build & Test (Maven)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Maven verify
+        run: mvn -B -ntp clean verify
+
+  docker-build:
+    name: Docker Build (${{ matrix.flavor }})
+    runs-on: ubuntu-latest
+    needs: [ test ]
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - flavor: jvm
+            dockerfile: docker/Dockerfile
+            tag: latest
+            build_args: ""
+          - flavor: aot
+            dockerfile: docker/Dockerfile.aot
+            tag: aot
+            build_args: ""
+          - flavor: cds
+            dockerfile: docker/Dockerfile.cds
+            tag: cds
+            build_args: ""
+          - flavor: native
+            dockerfile: docker/Dockerfile.native
+            tag: native
+            build_args: "IMAGE_NAME=spring-boot-template"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # If your Dockerfiles run Maven inside Docker, you don't need Java here.
+      # If they depend on local build artifacts (target/*.jar), keep this:
+      - name: Set up Java (only if needed)
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      # Optional: build jar first if your Dockerfile expects it
+      - name: Build jar (optional)
+        run: mvn -B -ntp -DskipTests package
+
+      - name: Docker build
+        run: |
+          ARGS=""
+          if [ -n "${{ matrix.build_args }}" ]; then
+            ARGS="--build-arg ${{ matrix.build_args }}"
+          fi
+
+          docker build \
+            -f ${{ matrix.dockerfile }} \
+            $ARGS \
+            -t spring-boot-template:${{ matrix.tag }} \
+            .
+
+  smoke:
+    name: Smoke Test (container)
+    runs-on: ubuntu-latest
+    needs: [ docker-build ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build default image
+        run: docker build -f docker/Dockerfile -t spring-boot-template:latest .
+
+      - name: Run container
+        run: |
+          docker run -d --rm --name app -p 8080:8080 spring-boot-template:latest
+          # Give app a moment to start
+          for i in {1..30}; do
+            if curl -fsS http://localhost:8080/actuator/health >/dev/null; then
+              echo "Healthy!"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "App did not become healthy in time"
+          docker logs app
+          exit 1
+
+      - name: Stop container
+        if: always()
+        run: docker stop app || true

@@ -1,0 +1,4 @@
+services:
+  app:
+    environment:
+      - JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=75
