@@ -13,15 +13,17 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
 )
 
 type Config struct {
-	Addr            string // :8091
-	KeycloakBaseURL string // http://keycloak:8080  (inside docker) OR http://localhost:8080 (local)
-	Realm           string // demo
+	Addr                    string // :8091
+	KeycloakPublicBaseURL   string
+	KeycloakInternalBaseURL string
+	Realm                   string // demo
 
 	ClientID     string
 	ClientSecret string
@@ -71,13 +73,14 @@ var (
 
 func main() {
 	cfg := Config{
-		Addr:            envDefault("ADDR", ":8091"),
-		KeycloakBaseURL: mustEnv("KEYCLOAK_BASE_URL"),
-		Realm:           mustEnv("KEYCLOAK_REALM"),
-		ClientID:        mustEnv("OIDC_CLIENT_ID"),
-		ClientSecret:    mustEnv("OIDC_CLIENT_SECRET"),
-		RedirectURI:     mustEnv("OIDC_REDIRECT_URI"),
-		IdPHint:         envDefault("KC_IDP_HINT", "bridge"),
+		Addr:                    envDefault("ADDR", ":8091"),
+		KeycloakPublicBaseURL:   mustEnv("KEYCLOAK_PUBLIC_BASE_URL"),
+		KeycloakInternalBaseURL: mustEnv("KEYCLOAK_INTERNAL_BASE_URL"),
+		Realm:                   mustEnv("KEYCLOAK_REALM"),
+		ClientID:                mustEnv("OIDC_CLIENT_ID"),
+		ClientSecret:            mustEnv("OIDC_CLIENT_SECRET"),
+		RedirectURI:             mustEnv("OIDC_REDIRECT_URI"),
+		IdPHint:                 envDefault("KC_IDP_HINT", "bridge"),
 	}
 
 	mux := http.NewServeMux()
@@ -130,7 +133,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request, cfg Config) {
 	}
 	authReqMu.Unlock()
 
-	authURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/auth", strings.TrimRight(cfg.KeycloakBaseURL, "/"), cfg.Realm)
+	authURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/auth", strings.TrimRight(cfg.KeycloakPublicBaseURL, "/"), cfg.Realm)
 
 	q := url.Values{}
 	q.Set("client_id", cfg.ClientID)
@@ -222,7 +225,7 @@ func handleExchange(w http.ResponseWriter, r *http.Request, cfg Config) {
 		return
 	}
 
-	tokenURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/token", strings.TrimRight(cfg.KeycloakBaseURL, "/"), cfg.Realm)
+	tokenURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/token", strings.TrimRight(cfg.KeycloakInternalBaseURL, "/"), cfg.Realm)
 
 	form := url.Values{}
 	form.Set("grant_type", "authorization_code")
@@ -300,7 +303,7 @@ func handleUserInfo(w http.ResponseWriter, r *http.Request, cfg Config) {
 		return
 	}
 
-	userinfoURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/userinfo", strings.TrimRight(cfg.KeycloakBaseURL, "/"), cfg.Realm)
+	userinfoURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/userinfo", strings.TrimRight(cfg.KeycloakInternalBaseURL, "/"), cfg.Realm)
 
 	req, _ := http.NewRequest(http.MethodGet, userinfoURL, nil)
 	req.Header.Set("Authorization", "Bearer "+sess.Tokens.AccessToken)
@@ -378,7 +381,7 @@ func loadSession(r *http.Request) (*Session, string, error) {
 // ---------------- helpers ----------------
 
 func mustEnv(k string) string {
-	v := strings.TrimSpace(getenv(k))
+	v := strings.TrimSpace(os.Getenv(k))
 	if v == "" {
 		log.Fatalf("missing env %s", k)
 	}
@@ -386,7 +389,7 @@ func mustEnv(k string) string {
 }
 
 func envDefault(k, def string) string {
-	v := strings.TrimSpace(getenv(k))
+	v := strings.TrimSpace(os.Getenv(k))
 	if v == "" {
 		return def
 	}

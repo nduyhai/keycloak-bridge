@@ -119,13 +119,19 @@ services:
     ports:
       - "8091:8091"
     environment:
-      SERVER_PORT: "8091"
-      OIDC_ISSUER: "http://localhost:8080/realms/demo"
+      ADDR: ":8091"                         # matches envDefault("ADDR", ":8091")
+      SERVER_PORT: "8091"                   # optional if your app uses it elsewhere
+
+      KEYCLOAK_PUBLIC_BASE_URL: "http://localhost:8080"
+      KEYCLOAK_INTERNAL_BASE_URL: "http://keycloak:8080"
+      KEYCLOAK_REALM: "demo"
+
       OIDC_CLIENT_ID: "rp-client"
       OIDC_CLIENT_SECRET: "rp-secret"
-      REDIRECT_URI: "http://localhost:8091/success"
-      # If RP runs inside docker and calls Keycloak internally:
-      OIDC_INTERNAL_ISSUER: "http://keycloak:8080/realms/demo"
+      OIDC_REDIRECT_URI: "http://localhost:8091/callback"
+
+      # optional
+      KC_IDP_HINT: "bridge"
     networks:
       - sso
 

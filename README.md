@@ -352,6 +352,8 @@ mvn test
 ```bash
 docker compose -f docker/docker-compose.override.yml up -d --build
 
+docker compose -f docker/docker-compose.override.yml up -d --build --force-recreate rp
+
 ```
 
 

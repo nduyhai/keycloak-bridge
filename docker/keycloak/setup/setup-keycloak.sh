@@ -6,7 +6,6 @@ KC_BIN="/opt/keycloak/bin/kcadm.sh"
 KEYCLOAK_URL="${KEYCLOAK_URL:-http://keycloak:8080}"
 KEYCLOAK_ADMIN="${KEYCLOAK_ADMIN:-admin}"
 KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-admin}"
-
 REALM="${REALM:-demo}"
 
 # IdP (Bridge)
@@ -18,7 +17,7 @@ BRIDGE_CLIENT_SECRET="${BRIDGE_CLIENT_SECRET:-keycloak-broker-secret}"
 # RP client (App -> Keycloak)
 RP_CLIENT_ID="${RP_CLIENT_ID:-rp-client}"
 RP_CLIENT_SECRET="${RP_CLIENT_SECRET:-rp-secret}"
-RP_REDIRECT_URI="${RP_REDIRECT_URI:-http://localhost:8091/success}"
+RP_REDIRECT_URI="${RP_REDIRECT_URI:-http://localhost:8091/callback}"
 
 echo "==> Waiting for Keycloak at ${KEYCLOAK_URL} ..."
 i=0
@@ -47,7 +46,9 @@ fi
 
 # ---------- RP Client ----------
 get_client_id() {
-  ${KC_BIN} get clients -r "${REALM}" -q "clientId=$1" --fields id --format csv | tail -n 1 | tr -d '\r'
+  ${KC_BIN} get clients -r "${REALM}" -q "clientId=$1" --fields id --format csv \
+    | tail -n 1 \
+    | tr -d '\r"'
 }
 
 RP_UUID="$(get_client_id "${RP_CLIENT_ID}")"
@@ -121,9 +122,11 @@ ensure_idp_mapper() {
   CLAIM="$2"
   USER_ATTR="$3"
 
-  # Find mapper id by name
-  MID="$(${KC_BIN} get "identity-provider/instances/${IDP_ALIAS}/mappers" -r "${REALM}" --format csv \
-    | awk -F, -v name="${MAPPER_NAME}" '$2==name {print $1}' | tr -d '\r' | head -n 1)"
+  # Find mapper id by name (use JSON + grep/sed only)
+  MID="$(${KC_BIN} get "identity-provider/instances/${IDP_ALIAS}/mappers" -r "${REALM}" \
+    | tr -d '\r' \
+    | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*"name"[[:space:]]*:[[:space:]]*"'${MAPPER_NAME}'".*/\1/p' \
+    | head -n 1)"
 
   if [ -n "${MID}" ]; then
     echo "==> IdP mapper ${MAPPER_NAME} exists, updating"
@@ -156,9 +159,10 @@ ensure_user_attr_protocol_mapper() {
   USER_ATTR="$3"
   CLAIM_NAME="$4"
 
-  # Find mapper
-  MID="$(${KC_BIN} get "clients/${CLIENT_UUID}/protocol-mappers/models" -r "${REALM}" --format csv \
-    | awk -F, -v name="${MAPPER_NAME}" '$2==name {print $1}' | tr -d '\r' | head -n 1)"
+  MID="$(${KC_BIN} get "clients/${CLIENT_UUID}/protocol-mappers/models" -r "${REALM}" \
+    | tr -d '\r' \
+    | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*"name"[[:space:]]*:[[:space:]]*"'${MAPPER_NAME}'".*/\1/p' \
+    | head -n 1)"
 
   if [ -n "${MID}" ]; then
     echo "==> Protocol mapper ${MAPPER_NAME} exists, updating"
@@ -186,6 +190,7 @@ ensure_user_attr_protocol_mapper() {
       -s "config.userinfo.token.claim=true" >/dev/null
   fi
 }
+
 
 ensure_user_attr_protocol_mapper "${RP_UUID}" "ext-user-id-as-user-id" "ext_user_id" "user_id"
 
