@@ -1,7 +1,4 @@
 services:
-  app:
-    environment:
-      - JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=75
   postgres:
     image: postgres:16-alpine
     container_name: sso-postgres
@@ -91,8 +88,8 @@ services:
   bridge:
     # Spring Boot 4 / JDK 25 Bridge (OIDC Provider via Spring Authorization Server)
     build:
-      context: ./bridge
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile
     container_name: sso-bridge
     depends_on:
       - login-api
@@ -112,8 +109,9 @@ services:
       - sso
 
   rp:
-    # Replace with your RP image or build context
-    image: yourorg/relying-party:latest
+    build:
+      context: ../rp
+      dockerfile: Dockerfile
     container_name: sso-rp
     depends_on:
       - keycloak
@@ -132,8 +130,9 @@ services:
       - sso
 
   login-api:
-    # Replace it with your actual Login API image or build context
-    image: yourorg/login-api:latest
+    build:
+      context: ../login-api
+      dockerfile: Dockerfile
     container_name: sso-login-api
     ports:
       - "8090:8090"

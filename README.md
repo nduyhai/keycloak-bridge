@@ -347,48 +347,13 @@ mvn test
 
 ---
 
-## 🧩 Native Build Notes
-
-- Native build is handled via Dockerfile.native
-- No Lombok to avoid native/AOT issues
-- Image name defaults to Maven artifactId
-
----
-
-## 🛠️ Customization After Using Template
-
-After clicking **Use this template**, you should:
-
-1. Rename:
-    - groupId
-    - artifactId
-    - package name
-2. Update:
-    - spring.application.name
-    - Docker image name (if desired)
-3. Add dependencies as needed:
-    - JPA / Mongo
-    - Security
-    - Kafka / Redis
-    - Observability
-
-We can use the script to quickly rename:
+## 🧩 Development
 
 ```bash
-chmod +x scripts/init-project.sh
+docker compose -f docker/docker-compose.override.yml up -d --build
 
-./scripts/init-project.sh new-project-name
 ```
 
----
-
-## 📌 Design Principles
-
-- Minimal by default
-- No opinionated libraries
-- Docker-first
-- Native-ready
-- Easy to extend
 
 ---
 
