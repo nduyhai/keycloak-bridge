@@ -93,6 +93,8 @@ if ${KC_BIN} get "identity-provider/instances/${IDP_ALIAS}" -r "${REALM}" >/dev/
     -s "config.userInfoUrl=${BRIDGE_INTERNAL_ISSUER}/oauth2/userinfo" \
     -s "config.defaultScope=openid profile email" \
     -s "config.useJwksUrl=true" \
+    -s "config.pkceEnabled=true" \
+    -s "config.pkceMethod=S256" \
     -s "config.validateSignature=true" >/dev/null
 else
   echo "==> Creating IdP ${IDP_ALIAS} -> ${BRIDGE_ISSUER}"
@@ -108,6 +110,8 @@ else
      -s "config.userInfoUrl=${BRIDGE_INTERNAL_ISSUER}/oauth2/userinfo" \
     -s "config.defaultScope=openid profile email" \
     -s "config.useJwksUrl=true" \
+    -s "config.pkceEnabled=true" \
+    -s "config.pkceMethod=S256" \
     -s "config.validateSignature=true" >/dev/null
 fi
 

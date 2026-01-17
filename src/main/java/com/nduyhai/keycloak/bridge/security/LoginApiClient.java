@@ -1,5 +1,6 @@
 package com.nduyhai.keycloak.bridge.security;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -26,6 +27,6 @@ public class LoginApiClient {
     public record LoginRequest(String username, String password) {
     }
 
-    public record LoginResponse(String userId, String name, String email) {
+    public record LoginResponse(@JsonProperty("user_id") String userId, String name, String email) {
     }
 }

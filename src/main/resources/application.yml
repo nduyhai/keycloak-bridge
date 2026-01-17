@@ -7,10 +7,18 @@ spring:
 server:
   port: 8081
 app:
-  issuer: http://localhost:8081
-  loginApiBaseUrl: http://localhost:8090
+  issuer: ${APP_ISSUER:http://localhost:8081}
+  loginApiBaseUrl: ${APP_LOGIN_API_BASE_URL:http://localhost:8090}
+  client:
+    id: ${BRIDGE_CLIENT_ID:"keycloak-broker"}
+    secret: ${BRIDGE_CLIENT_SECRET:"keycloak-broker-secret"}
+    redirectUrl: ${BRIDGE_CLIENT_REDIRECT_URL:"http://localhost:8080/realms/demo/broker/bridge/endpoint"} #http://localhost:8080/realms/<realm>/broker/<alias>/endpoint
 
 
+logging:
+  level:
+    org.springframework.security: DEBUG
+    org.springframework.security.authentication: TRACE
 management:
   endpoints:
     web:

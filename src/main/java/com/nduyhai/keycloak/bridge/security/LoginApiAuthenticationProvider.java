@@ -21,25 +21,19 @@ public class LoginApiAuthenticationProvider implements AuthenticationProvider {
 
     @Override
     public Authentication authenticate(Authentication authentication) throws AuthenticationException {
-        String username = String.valueOf(authentication.getPrincipal());
-        String password = String.valueOf(authentication.getCredentials());
+        String username = (authentication.getName() == null) ? "" : authentication.getName();
+        String password = (authentication.getCredentials() == null) ? "" : authentication.getCredentials().toString();
 
-        LoginApiClient.LoginResponse res;
-        try {
-            res = loginApi.login(username, password);
-        } catch (Exception e) {
-            throw new BadCredentialsException("Login failed", e);
+        var user = loginApi.login(username, password);
+        if (user == null) {
+            throw new BadCredentialsException("Invalid username or password");
         }
 
-        if (res == null || res.userId() == null || res.userId().isBlank()) {
-            throw new BadCredentialsException("Invalid credentials");
-        }
-
+        // return an AUTHENTICATED token (3-arg constructor) with authorities
         var authorities = List.of(new SimpleGrantedAuthority("ROLE_USER"));
 
         // Principal username == user_id => ID token sub == user_id
-        var principal = new BridgeUserDetails(res.userId(), res.name(), res.email(), authorities);
-
+        var principal = new BridgeUserDetails(user.userId(), user.name(), user.email(), authorities);
         return new UsernamePasswordAuthenticationToken(principal, null, authorities);
     }
 

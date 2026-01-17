@@ -102,9 +102,10 @@ services:
       APP_ISSUER: "http://localhost:8081"
       APP_LOGIN_API_BASE_URL: "http://login-api:8090"
 
-      # (Optional) if you still keep your own session cookie for UI
-      COOKIE_AUTH_KEY: "CHANGE_ME_32+_BYTES_AUTH_KEY________"
-      COOKIE_ENC_KEY: "CHANGE_ME_32+_BYTES_ENC_KEY_________"
+      BRIDGE_CLIENT_ID: "keycloak-broker"
+      BRIDGE_CLIENT_SECRET: "keycloak-broker-secret"
+      BRIDGE_CLIENT_REDIRECT_URL: "http://localhost:8080/realms/demo/broker/bridge/endpoint"
+
     networks:
       - sso
 

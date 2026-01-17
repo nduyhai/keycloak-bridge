@@ -45,6 +45,16 @@ public class SecurityConfig {
     @Value("${app.issuer}")
     String issuer;
 
+    @Value("${app.client.id}")
+    String clientId;
+
+    @Value("${app.client.secret}")
+    String clientSecret;
+
+    @Value("${app.client.redirectUrl}")
+    String redirectUrl;
+
+
     private static RSAKey generateRsa() {
         try {
             KeyPairGenerator g = KeyPairGenerator.getInstance("RSA");
@@ -65,19 +75,24 @@ public class SecurityConfig {
      */
     @Bean
     @Order(1)
-    SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain authorizationServerChain(HttpSecurity http) throws Exception {
         OAuth2AuthorizationServerConfigurer as = new OAuth2AuthorizationServerConfigurer();
+        var endpointsMatcher = as.getEndpointsMatcher();
 
         http
-                .securityMatcher(as.getEndpointsMatcher())
+                .securityMatcher(endpointsMatcher)
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/error").permitAll()
+                        .anyRequest().authenticated()
+                )
                 .with(as, cfg -> cfg
-                        .oidc(Customizer.withDefaults()) // ✅ enables OIDC endpoints
+                        .oidc(Customizer.withDefaults())
                 )
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/login"))
                 )
                 .csrf(csrf -> csrf
-                        .ignoringRequestMatchers(as.getEndpointsMatcher())
+                        .ignoringRequestMatchers(endpointsMatcher)
                 );
 
         return http.build();
@@ -94,11 +109,19 @@ public class SecurityConfig {
 
         http
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/login", "/assets/**").permitAll()
-                        .anyRequest().authenticated()
+                        .requestMatchers(
+                                "/login",
+                                "/assets/**",
+                                "/favicon.ico",
+                                "/error",
+                                "/.well-known/**"   // ✅ important for Chrome devtools + any discovery files you expose
+                        ).permitAll()
                 )
                 .authenticationProvider(provider)
-                .formLogin(form -> form.loginPage("/login"))
+                .formLogin(form -> form.loginPage("/login")
+                        .loginProcessingUrl("/login")   // ✅ explicit
+                        .defaultSuccessUrl("/", true)
+                        .failureUrl("/login?error"))
                 .logout(logout -> logout.logoutUrl("/logout"));
 
         return http.build();
@@ -117,12 +140,12 @@ public class SecurityConfig {
     @Bean
     RegisteredClientRepository registeredClientRepository(PasswordEncoder enc) {
         RegisteredClient keycloak = RegisteredClient.withId(UUID.randomUUID().toString())
-                .clientId("keycloak-broker")
-                .clientSecret(enc.encode("keycloak-broker-secret"))
+                .clientId(clientId)
+                .clientSecret(enc.encode(clientSecret))
                 .clientAuthenticationMethod(org.springframework.security.oauth2.core.ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-                .redirectUri("http://localhost:8080/realms/demo/broker/bridge/endpoint")
+                .redirectUri(redirectUrl)
                 .scope("openid")
                 .scope("profile")
                 .scope("email")
