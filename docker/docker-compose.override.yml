@@ -78,7 +78,7 @@ services:
       # RP client (your demo relying party inside Keycloak)
       RP_CLIENT_ID: "rp-client"
       RP_CLIENT_SECRET: "rp-secret"
-      RP_REDIRECT_URI: "http://localhost:8091/success"
+      RP_REDIRECT_URI: "http://localhost:8091/callback"
     volumes:
       - ./keycloak/setup:/opt/keycloak/setup:ro
     restart: "no"

@@ -352,8 +352,20 @@ mvn test
 ```bash
 docker compose -f docker/docker-compose.override.yml up -d --build
 
-docker compose -f docker/docker-compose.override.yml up -d --build --force-recreate rp
 
+
+```
+
+View setup Keycloak logs
+```bash
+docker compose -f docker/docker-compose.override.yml logs -f --tail=80 keycloak-setup
+
+```
+Rebuild service
+
+```bash
+docker compose -f docker/docker-compose.override.yml up -d --force-recreate keycloak-setup
+docker compose -f docker/docker-compose.override.yml up -d --build --force-recreate rp
 ```
 
 

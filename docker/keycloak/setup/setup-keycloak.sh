@@ -6,6 +6,7 @@ KC_BIN="/opt/keycloak/bin/kcadm.sh"
 KEYCLOAK_URL="${KEYCLOAK_URL:-http://keycloak:8080}"
 KEYCLOAK_ADMIN="${KEYCLOAK_ADMIN:-admin}"
 KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-admin}"
+
 REALM="${REALM:-demo}"
 
 # IdP (Bridge)
@@ -63,7 +64,7 @@ if [ -n "${RP_UUID}" ]; then
     -s "redirectUris=[\"${RP_REDIRECT_URI}\"]" >/dev/null
 else
   echo "==> Creating RP client ${RP_CLIENT_ID}"
-  ${KC_BIN} create clients -r "${REALM}" \
+  ${KC_BIN} create clients -r "${REALM}" -i \
     -s "clientId=${RP_CLIENT_ID}" \
     -s "enabled=true" \
     -s "protocol=openid-connect" \
@@ -78,7 +79,6 @@ echo "==> Setting RP secret"
 ${KC_BIN} update "clients/${RP_UUID}" -r "${REALM}" -s "secret=${RP_CLIENT_SECRET}" >/dev/null
 
 # ---------- Identity Provider (Bridge OIDC) ----------
-# Create/update IdP instance
 if ${KC_BIN} get "identity-provider/instances/${IDP_ALIAS}" -r "${REALM}" >/dev/null 2>&1; then
   echo "==> IdP ${IDP_ALIAS} exists, updating..."
   ${KC_BIN} update "identity-provider/instances/${IDP_ALIAS}" -r "${REALM}" \
@@ -95,7 +95,7 @@ if ${KC_BIN} get "identity-provider/instances/${IDP_ALIAS}" -r "${REALM}" >/dev/
     -s "config.validateSignature=true" >/dev/null
 else
   echo "==> Creating IdP ${IDP_ALIAS} -> ${BRIDGE_ISSUER}"
-  ${KC_BIN} create identity-provider/instances -r "${REALM}" \
+  ${KC_BIN} create identity-provider/instances -r "${REALM}" -i \
     -s "alias=${IDP_ALIAS}" \
     -s "enabled=true" \
     -s "providerId=oidc" \
@@ -111,83 +111,97 @@ else
 fi
 
 # ---------- IdP Mappers ----------
-# Goal:
-# - take claim "sub" from Bridge (LoginAPI user_id)
-# - store into Keycloak user attribute "ext_user_id"
-# - then expose in Keycloak tokens as claim "user_id"
-
-# Helper: create IdP mapper if missing
 ensure_idp_mapper() {
   MAPPER_NAME="$1"
   CLAIM="$2"
   USER_ATTR="$3"
 
-  # Find mapper id by name (use JSON + grep/sed only)
-  MID="$(${KC_BIN} get "identity-provider/instances/${IDP_ALIAS}/mappers" -r "${REALM}" \
-    | tr -d '\r' \
-    | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*"name"[[:space:]]*:[[:space:]]*"'${MAPPER_NAME}'".*/\1/p' \
-    | head -n 1)"
+  MID="$(${KC_BIN} get "identity-provider/instances/${IDP_ALIAS}/mappers" -r "${REALM}" --format csv \
+    | tr -d '\r"' \
+    | grep -F ",${MAPPER_NAME}," \
+    | head -n 1 \
+    | cut -d, -f1 || true)"
 
   if [ -n "${MID}" ]; then
-    echo "==> IdP mapper ${MAPPER_NAME} exists, updating"
+    echo "==> IdP mapper ${MAPPER_NAME} exists, updating (id=${MID})"
     ${KC_BIN} update "identity-provider/instances/${IDP_ALIAS}/mappers/${MID}" -r "${REALM}" \
       -s "name=${MAPPER_NAME}" \
       -s "identityProviderAlias=${IDP_ALIAS}" \
       -s "identityProviderMapper=oidc-user-attribute-idp-mapper" \
       -s "config.claim=${CLAIM}" \
-      -s "config.user.attribute=${USER_ATTR}" >/dev/null
+      -s "config.\"user.attribute\"=${USER_ATTR}" \
+      -s "config.syncMode=INHERIT" >/dev/null
   else
     echo "==> Creating IdP mapper ${MAPPER_NAME}"
-    ${KC_BIN} create "identity-provider/instances/${IDP_ALIAS}/mappers" -r "${REALM}" \
-      -s "name=${MAPPER_NAME}" \
-      -s "identityProviderAlias=${IDP_ALIAS}" \
-      -s "identityProviderMapper=oidc-user-attribute-idp-mapper" \
-      -s "config.claim=${CLAIM}" \
-      -s "config.user.attribute=${USER_ATTR}" >/dev/null
+
+    # Try mapper type A then fallback B (both with correct dotted key quoting)
+    if ${KC_BIN} create "identity-provider/instances/${IDP_ALIAS}/mappers" -r "${REALM}" -i \
+        -s "name=${MAPPER_NAME}" \
+        -s "identityProviderAlias=${IDP_ALIAS}" \
+        -s "identityProviderMapper=oidc-user-attribute-idp-mapper" \
+        -s "config.claim=${CLAIM}" \
+        -s "config.\"user.attribute\"=${USER_ATTR}" \
+        -s "config.syncMode=INHERIT" >/dev/null 2>&1
+    then
+      echo "==> Created mapper ${MAPPER_NAME} (oidc-user-attribute-idp-mapper)"
+      return 0
+    fi
+
+    echo "==> First mapper type failed, trying fallback oidc-user-attribute-mapper..."
+    ${KC_BIN} create "identity-provider/instances/${IDP_ALIAS}/mappers" -r "${REALM}" -i \
+        -s "name=${MAPPER_NAME}" \
+        -s "identityProviderAlias=${IDP_ALIAS}" \
+        -s "identityProviderMapper=oidc-user-attribute-mapper" \
+        -s "config.claim=${CLAIM}" \
+        -s "config.\"user.attribute\"=${USER_ATTR}" \
+        -s "config.syncMode=INHERIT"
   fi
 }
+
+
+
 
 ensure_idp_mapper "bridge-sub-to-ext-user-id" "sub" "ext_user_id"
 ensure_idp_mapper "bridge-email-to-email" "email" "email"
 ensure_idp_mapper "bridge-name-to-name" "name" "name"
 
 # ---------- Protocol Mapper: user attribute -> token claim ----------
-# Put ext_user_id into tokens as user_id
 ensure_user_attr_protocol_mapper() {
   CLIENT_UUID="$1"
   MAPPER_NAME="$2"
   USER_ATTR="$3"
   CLAIM_NAME="$4"
 
-  MID="$(${KC_BIN} get "clients/${CLIENT_UUID}/protocol-mappers/models" -r "${REALM}" \
-    | tr -d '\r' \
-    | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*"name"[[:space:]]*:[[:space:]]*"'${MAPPER_NAME}'".*/\1/p' \
-    | head -n 1)"
+  MID="$(${KC_BIN} get "clients/${CLIENT_UUID}/protocol-mappers/models" -r "${REALM}" --format csv \
+    | tr -d '\r"' \
+    | grep -F ",${MAPPER_NAME}," \
+    | head -n 1 \
+    | cut -d, -f1 || true)"
 
   if [ -n "${MID}" ]; then
-    echo "==> Protocol mapper ${MAPPER_NAME} exists, updating"
+    echo "==> Protocol mapper ${MAPPER_NAME} exists, updating (id=${MID})"
     ${KC_BIN} update "clients/${CLIENT_UUID}/protocol-mappers/models/${MID}" -r "${REALM}" \
       -s "name=${MAPPER_NAME}" \
       -s "protocol=openid-connect" \
       -s "protocolMapper=oidc-usermodel-attribute-mapper" \
-      -s "config.user.attribute=${USER_ATTR}" \
-      -s "config.claim.name=${CLAIM_NAME}" \
-      -s "config.jsonType.label=String" \
-      -s "config.id.token.claim=true" \
-      -s "config.access.token.claim=true" \
-      -s "config.userinfo.token.claim=true" >/dev/null
+      -s "config.\"user.attribute\"=${USER_ATTR}" \
+      -s "config.\"claim.name\"=${CLAIM_NAME}" \
+      -s "config.\"jsonType.label\"=String" \
+      -s "config.\"id.token.claim\"=true" \
+      -s "config.\"access.token.claim\"=true" \
+      -s "config.\"userinfo.token.claim\"=true" >/dev/null
   else
     echo "==> Creating protocol mapper ${MAPPER_NAME}"
-    ${KC_BIN} create "clients/${CLIENT_UUID}/protocol-mappers/models" -r "${REALM}" \
+    ${KC_BIN} create "clients/${CLIENT_UUID}/protocol-mappers/models" -r "${REALM}" -i \
       -s "name=${MAPPER_NAME}" \
       -s "protocol=openid-connect" \
       -s "protocolMapper=oidc-usermodel-attribute-mapper" \
-      -s "config.user.attribute=${USER_ATTR}" \
-      -s "config.claim.name=${CLAIM_NAME}" \
-      -s "config.jsonType.label=String" \
-      -s "config.id.token.claim=true" \
-      -s "config.access.token.claim=true" \
-      -s "config.userinfo.token.claim=true" >/dev/null
+      -s "config.\"user.attribute\"=${USER_ATTR}" \
+      -s "config.\"claim.name\"=${CLAIM_NAME}" \
+      -s "config.\"jsonType.label\"=String" \
+      -s "config.\"id.token.claim\"=true" \
+      -s "config.\"access.token.claim\"=true" \
+      -s "config.\"userinfo.token.claim\"=true" >/dev/null
   fi
 }
 
