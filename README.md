@@ -366,6 +366,7 @@ Rebuild service
 ```bash
 docker compose -f docker/docker-compose.override.yml up -d --force-recreate keycloak-setup
 docker compose -f docker/docker-compose.override.yml up -d --build --force-recreate rp
+docker compose -f docker/docker-compose.override.yml up -d --build --force-recreate bridge
 ```
 
 

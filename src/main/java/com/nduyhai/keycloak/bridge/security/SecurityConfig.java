@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.oauth2.server.authorization.OAuth2AuthorizationServerConfigurer;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
@@ -64,24 +65,24 @@ public class SecurityConfig {
      */
     @Bean
     @Order(1)
-    SecurityFilterChain authorizationServerChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http) throws Exception {
+        OAuth2AuthorizationServerConfigurer as = new OAuth2AuthorizationServerConfigurer();
+
         http
-                .securityMatcher("/oauth2/**", "/.well-known/**")
-                .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
-                .oauth2AuthorizationServer(authz -> authz
-                        .oidc(Customizer.withDefaults())
+                .securityMatcher(as.getEndpointsMatcher())
+                .with(as, cfg -> cfg
+                        .oidc(Customizer.withDefaults()) // ✅ enables OIDC endpoints
                 )
-                .exceptionHandling(ex ->
-                        ex.authenticationEntryPoint(
-                                new LoginUrlAuthenticationEntryPoint("/login")
-                        )
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/login"))
                 )
                 .csrf(csrf -> csrf
-                        .ignoringRequestMatchers("/oauth2/**", "/.well-known/**")
+                        .ignoringRequestMatchers(as.getEndpointsMatcher())
                 );
 
         return http.build();
     }
+
 
     /**
      * 2) App chain (login UI + your pages)

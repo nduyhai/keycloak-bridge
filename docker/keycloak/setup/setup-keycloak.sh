@@ -11,7 +11,8 @@ REALM="${REALM:-demo}"
 
 # IdP (Bridge)
 IDP_ALIAS="${IDP_ALIAS:-bridge}"
-BRIDGE_ISSUER="${BRIDGE_ISSUER:-http://bridge:8081}"
+BRIDGE_PUBLIC_ISSUER="${BRIDGE_PUBLIC_ISSUER:-http://localhost:8081}"
+BRIDGE_INTERNAL_ISSUER="${BRIDGE_INTERNAL_ISSUER:-http://bridge:8081}"
 BRIDGE_CLIENT_ID="${BRIDGE_CLIENT_ID:-keycloak-broker}"
 BRIDGE_CLIENT_SECRET="${BRIDGE_CLIENT_SECRET:-keycloak-broker-secret}"
 
@@ -86,10 +87,10 @@ if ${KC_BIN} get "identity-provider/instances/${IDP_ALIAS}" -r "${REALM}" >/dev/
     -s "providerId=oidc" \
     -s "config.clientId=${BRIDGE_CLIENT_ID}" \
     -s "config.clientSecret=${BRIDGE_CLIENT_SECRET}" \
-    -s "config.authorizationUrl=${BRIDGE_ISSUER}/oauth2/authorize" \
-    -s "config.tokenUrl=${BRIDGE_ISSUER}/oauth2/token" \
-    -s "config.jwksUrl=${BRIDGE_ISSUER}/oauth2/jwks" \
-    -s "config.userInfoUrl=${BRIDGE_ISSUER}/oauth2/userinfo" \
+    -s "config.authorizationUrl=${BRIDGE_PUBLIC_ISSUER}/oauth2/authorize" \
+    -s "config.tokenUrl=${BRIDGE_INTERNAL_ISSUER}/oauth2/token" \
+    -s "config.jwksUrl=${BRIDGE_INTERNAL_ISSUER}/oauth2/jwks" \
+    -s "config.userInfoUrl=${BRIDGE_INTERNAL_ISSUER}/oauth2/userinfo" \
     -s "config.defaultScope=openid profile email" \
     -s "config.useJwksUrl=true" \
     -s "config.validateSignature=true" >/dev/null
@@ -101,10 +102,10 @@ else
     -s "providerId=oidc" \
     -s "config.clientId=${BRIDGE_CLIENT_ID}" \
     -s "config.clientSecret=${BRIDGE_CLIENT_SECRET}" \
-    -s "config.authorizationUrl=${BRIDGE_ISSUER}/oauth2/authorize" \
-    -s "config.tokenUrl=${BRIDGE_ISSUER}/oauth2/token" \
-    -s "config.jwksUrl=${BRIDGE_ISSUER}/oauth2/jwks" \
-    -s "config.userInfoUrl=${BRIDGE_ISSUER}/oauth2/userinfo" \
+     -s "config.authorizationUrl=${BRIDGE_PUBLIC_ISSUER}/oauth2/authorize" \
+     -s "config.tokenUrl=${BRIDGE_INTERNAL_ISSUER}/oauth2/token" \
+     -s "config.jwksUrl=${BRIDGE_INTERNAL_ISSUER}/oauth2/jwks" \
+     -s "config.userInfoUrl=${BRIDGE_INTERNAL_ISSUER}/oauth2/userinfo" \
     -s "config.defaultScope=openid profile email" \
     -s "config.useJwksUrl=true" \
     -s "config.validateSignature=true" >/dev/null
