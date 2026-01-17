@@ -1,4 +1,4 @@
-package com.nduyhai.template;
+package com.nduyhai.keycloak.bridge;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;

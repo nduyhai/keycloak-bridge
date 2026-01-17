@@ -13,10 +13,10 @@ fi
 # -------------------------
 # TEMPLATE CONSTANTS
 # -------------------------
-OLD_NAME="spring-template"
-OLD_PACKAGE="com.nduyhai.template"
-OLD_APP="TemplateApplication"
-OLD_TEST="TemplateApplicationTests"
+OLD_NAME="keycloak-bridge"
+OLD_PACKAGE="com.nduyhai.keycloak.bridge"
+OLD_APP="KeycloakBridgeApplication"
+OLD_TEST="KeycloakBridgeApplicationTests"
 
 # -------------------------
 # DERIVED VALUES
