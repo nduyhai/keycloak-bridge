@@ -2,3 +2,127 @@ services:
   app:
     environment:
       - JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=75
+  postgres:
+    image: postgres:16-alpine
+    container_name: sso-postgres
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U keycloak -d keycloak" ]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: sso-keycloak
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - start-dev
+      - --http-port=8080
+      # If you plan to use "bridge cookie -> keycloak login" via custom SPI,
+      # you will likely run with a custom provider JAR; see note below.
+    environment:
+      # Admin
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+
+      # DB
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+
+      # Hostname settings for local dev
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+
+      # Optional: import realm on startup
+      # KC_FEATURES: token-exchange,admin-fine-grained-authz
+    ports:
+      - "8080:8080"
+    volumes:
+      # Optional: realm import
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+      # Optional: custom SPI/provider JARs (Bridge SSO Authenticator)
+      # - ./keycloak/providers:/opt/keycloak/providers
+    networks:
+      - sso
+      -
+
+
+  bridge:
+    # Spring Boot 4 / JDK 25 Bridge
+    # If you don't have an image yet, set the build context to your spring project.
+    build:
+      context: ./bridge
+      dockerfile: Dockerfile
+    container_name: sso-bridge
+    depends_on:
+      - keycloak
+      - login-api
+    ports:
+      - "8081:8081"
+    environment:
+      SERVER_PORT: "8081"
+
+      # Bridge SSO cookie secrets
+      COOKIE_AUTH_KEY: "CHANGE_ME_32+_BYTES_AUTH_KEY________"
+      COOKIE_ENC_KEY: "CHANGE_ME_32+_BYTES_ENC_KEY_________"
+      BRIDGE_ADDR: "http://localhost:8081"
+
+      # Who Bridge calls to verify credentials
+      LOGIN_API_URL: "http://login-api:8090"
+
+      # Keycloak endpoints (internal docker DNS)
+      KEYCLOAK_BASE_URL: "http://keycloak:8080"
+      KEYCLOAK_REALM: "demo"
+      # Bridge may need these for redirect building, token exchange helpers, etc.
+      KEYCLOAK_AUTH_URL: "http://keycloak:8080/realms/demo/protocol/openid-connect/auth"
+      KEYCLOAK_TOKEN_URL: "http://keycloak:8080/realms/demo/protocol/openid-connect/token"
+      KEYCLOAK_INTROSPECT_URL: "http://keycloak:8080/realms/demo/protocol/openid-connect/token/introspect"
+
+    networks:
+      - sso
+
+  rp:
+    # Replace with your RP image or build context
+    image: yourorg/relying-party:latest
+    container_name: sso-rp
+    depends_on:
+      - keycloak
+    ports:
+      - "8091:8091"
+    environment:
+      SERVER_PORT: "8091"
+      OIDC_ISSUER: "http://localhost:8080/realms/demo"
+      OIDC_CLIENT_ID: "rp-client"
+      OIDC_CLIENT_SECRET: "rp-secret"
+      REDIRECT_URI: "http://localhost:8091/success"
+      # If RP runs inside docker and needs to call KC, use http://keycloak:8080
+      OIDC_INTERNAL_ISSUER: "http://keycloak:8080/realms/demo"
+    networks:
+      - sso
+  login-api:
+    # Replace it with your actual Login API image or build context
+    image: yourorg/login-api:latest
+    container_name: sso-login-api
+    ports:
+      - "8090:8090"
+    environment:
+      SERVER_PORT: "8090"
+    networks:
+      - sso
+networks:
+  sso:
+
+volumes:
+  pg_data:

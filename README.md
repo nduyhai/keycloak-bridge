@@ -1,26 +1,172 @@
-# Spring Boot Template
+# Keycloak Bridge
 
-Minimal **Spring Boot 4** project template with **Java 25**, Docker support, and CI-ready setup.
+This project integrates **Keycloak** as the central **OAuth2 / OpenID Connect (OIDC) provider** while delegating **user authentication** to an existing internal **LoginAPI** service.
 
-This repository is intended to be used as a **GitHub Template** to quickly bootstrap new Spring Boot services.
+The main objective is to standardize authentication, authorization, and token management across services **without migrating or duplicating user credentials into Keycloak**.  
+Keycloak is responsible for OAuth2/OIDC flows, session management, token issuance, consent, and client configuration, while LoginAPI remains the **source of truth for user authentication**.
+
+This architecture enables secure SSO, improves consistency across services, and provides a clear path for future extensions such as MFA, advanced policies, and external identity providers.
+
+---
+
+## ✨ Feature Goals
+
+### Core Features
+- Keycloak as OAuth2 / OIDC provider
+- Authorization Code Flow support
+- Refresh tokens and token rotation
+- Token introspection and revocation
+- Client scopes and protocol mappers
+- Centralized SSO session management
+- Configurable consent handling
+### Authentication Integration
+- Delegate credential verification to LoginAPI
+- No password storage in Keycloak
+- Support for custom authentication logic via SPI
+- Just-in-time user provisioning (optional)
+- Stable identity mapping between LoginAPI users and Keycloak users
+
+### Security & Operations
+- Short-lived access tokens
+- Central logout and session invalidation
+- Clear separation of responsibilities:
+    - LoginAPI: authentication and user verification
+    - Keycloak: authorization, tokens, sessions
+- Ready for MFA and conditional authentication rules
+
+## Target Goals
+
+### Short-Term Goals
+- Integrate Keycloak without changing existing LoginAPI behavior
+- Enable OAuth2/OIDC for internal services
+- Minimize migration effort and operational risk
+- Keep the system simple and observable
+
+### Mid-Term Goals
+- Standardize token claims and scopes across services
+- Introduce MFA and advanced authentication flows
+- Improve admin visibility into users, sessions, and clients
+- Strengthen security with monitoring and rate limiting
+
+### Long-Term Goals
+- Optionally evolve LoginAPI into a full external user directory
+- Support multiple authentication sources if required
+- Enable cross-product SSO at scale
+- Maintain a clean, scalable, and extensible identity architecture
+
 
 ---
 
-## ✨ Features
+## Flow
 
-- Spring Boot **4.x**
-- Java **25**
-- Minimal dependencies (Web + Actuator)
-- Docker support:
-    - JVM
-    - AOT
-    - CDS
-    - GraalVM Native
-- Docker Compose profiles
-- GitHub Actions CI
-- No Lombok (pure Java, native-friendly)
+### Option A — Authenticator SPI (LoginAPI validates credentials)
 
----
+#### Pros
+
+- Fastest to implement
+- Keeps full OAuth2 / OIDC features of Keycloak
+- LoginAPI remains source of truth for credentials
+- Keycloak does NOT store passwords
+- Simple mental model
+- Works well with MFA, conditional flows, required actions
+- Easy to migrate to Option B later
+
+#### Cons
+
+- Keycloak stores user profiles locally (shadow users)
+- `sub` in JWT is Keycloak internal UUID
+- External `user_id` must be added as a custom claim
+- User lifecycle (disable/delete) may need syncing logic
+- Keycloak Admin UI shows local users, not authoritative LoginAPI view
+-
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant User as User Browser
+    participant KC as Keycloak
+    participant AuthSPI as Authenticator SPI
+    participant LoginAPI as LoginAPI
+    participant KCDB as Keycloak DB
+    User ->> KC: Open login page
+    User ->> KC: Submit username and password
+    KC ->> AuthSPI: Execute authentication step
+    AuthSPI ->> LoginAPI: Verify credentials
+    LoginAPI -->> AuthSPI: Auth success (user_id, profile)
+    AuthSPI ->> KCDB: Create or update local user
+    Note over KCDB: Stores user profile and attributes\nNo password stored
+    AuthSPI -->> KC: Authentication success
+    KC -->> User: Issue tokens (sub = KC internal UUID)
+
+
+```
+
+## Option B — User Federation / User Storage Provider (LoginAPI = user store)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant User as User Browser
+    participant KC as Keycloak
+    participant FedSPI as User Storage Provider
+    participant LoginAPI as LoginAPI
+    participant KCDB as Keycloak DB
+    User ->> KC: Open login page
+    User ->> KC: Submit username and password
+    KC ->> FedSPI: Find user by username
+    FedSPI ->> LoginAPI: Lookup user
+    LoginAPI -->> FedSPI: User data (user_id)
+    KC ->> FedSPI: Validate credentials
+    FedSPI ->> LoginAPI: Verify password
+    LoginAPI -->> FedSPI: Credential valid
+
+    alt Import ON
+        FedSPI ->> KCDB: Import user profile
+        Note over KCDB: Stores user profile only\nNo password
+    else Import OFF
+        Note over KCDB: No user stored
+    end
+
+    KC -->> User: Issue tokens (sub = user_id)
+
+```
+
+#### Pros
+
+- LoginAPI is the true user directory
+- Can make `sub = LoginAPI.user_id`
+- No passwords stored in Keycloak
+- Cleaner long-term architecture for external identity
+- Better alignment with LDAP / AD-like models
+- Import ON gives better admin UX
+- Import OFF avoids user data in Keycloak DB
+
+#### Cons
+
+- More complex to implement (user lookup + credential validation)
+- Higher coupling to LoginAPI availability
+- Import OFF limits admin search and user management
+- Needs careful caching and performance tuning
+- More SPI surface to maintain across Keycloak upgrades
+
+### Quick Decision Guide
+
+- Ship fast, OK with `sub != user_id`  
+  → Option A
+
+- `sub` must equal LoginAPI `user_id`  
+  → Option B
+
+- Avoid storing users in Keycloak DB  
+  → Option B (Import OFF)
+
+- Better admin UX, still external auth  
+  → Option B (Import ON)
+
+### Final
+
+Option A = simpler, faster, Keycloak stores users, sub = KC UUID  
+Option B = cleaner identity model, LoginAPI is user store, sub = user_id
 
 ## 🚀 Quick Start
 
