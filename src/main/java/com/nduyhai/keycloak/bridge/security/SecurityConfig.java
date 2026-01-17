@@ -114,18 +114,22 @@ public class SecurityConfig {
                                 "/assets/**",
                                 "/favicon.ico",
                                 "/error",
-                                "/.well-known/**"   // ✅ important for Chrome devtools + any discovery files you expose
+                                "/.well-known/**"
                         ).permitAll()
+                        .anyRequest().authenticated()
                 )
                 .authenticationProvider(provider)
-                .formLogin(form -> form.loginPage("/login")
-                        .loginProcessingUrl("/login")   // ✅ explicit
+                .formLogin(form -> form
+                        .loginPage("/login")
+                        .loginProcessingUrl("/login")
                         .defaultSuccessUrl("/", true)
-                        .failureUrl("/login?error"))
+                        .failureUrl("/login?error")
+                )
                 .logout(logout -> logout.logoutUrl("/logout"));
 
         return http.build();
     }
+
 
     @Bean
     PasswordEncoder passwordEncoder() {

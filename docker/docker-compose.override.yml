@@ -99,7 +99,7 @@ services:
       SERVER_PORT: "8081"
 
       # IMPORTANT: issuer must match what Keycloak uses (docker DNS name)
-      APP_ISSUER: "http://localhost:8081"
+      APP_ISSUER: "http://bridge:8081"
       APP_LOGIN_API_BASE_URL: "http://login-api:8090"
 
       BRIDGE_CLIENT_ID: "keycloak-broker"
