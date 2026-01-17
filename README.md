@@ -101,7 +101,7 @@ sequenceDiagram
 
 ```
 
-## Option B — User Federation / User Storage Provider (LoginAPI = user store)
+### Option B — User Federation / User Storage Provider (LoginAPI = user store)
 
 ```mermaid
 sequenceDiagram
@@ -149,24 +149,105 @@ sequenceDiagram
 - Needs careful caching and performance tuning
 - More SPI surface to maintain across Keycloak upgrades
 
+### Option C: SSO Bridge as OIDC IdP + Keycloak Identity Brokering
+
+```mermaid
+sequenceDiagram
+    autonumber
+
+    participant User as User Browser
+    participant App as RelyingParty (8091)
+    participant KC as Keycloak (8080)
+    participant SSO as SSO Bridge (8081)
+    participant LoginAPI as LoginAPI (8090)
+
+    User ->> App: Click Login
+    App -->> User: Redirect to Keycloak authorize
+    User ->> KC: GET authorize
+
+    KC -->> User: Redirect to SSO Bridge (OIDC IdP)
+    User ->> SSO: GET /authorize
+
+    alt SSO cookie exists
+        SSO ->> SSO: Validate SSO session
+    else No SSO cookie
+        SSO -->> User: Show custom login UI
+        User ->> SSO: POST credentials
+        SSO ->> LoginAPI: Verify credentials
+        LoginAPI -->> SSO: Auth success (user_id, claims)
+        SSO -->> User: Set SSO cookie
+    end
+
+    SSO -->> User: Redirect back to Keycloak callback with code
+    User ->> KC: GET IdP callback
+    KC ->> SSO: Exchange code for tokens
+    SSO -->> KC: IdP tokens and user claims
+
+    KC -->> User: Redirect back to App with code
+    User ->> App: GET callback with code
+    App ->> KC: Exchange code for tokens
+    KC -->> App: access_token, id_token, refresh_token
+
+
+```
+
+#### Pros
+
+- Full control over login UI and business logic
+    - Custom login pages
+    - Custom authentication flows and policies
+    - Custom SSO cookie and session handling
+- No Keycloak SPI required
+    - Easier upgrades
+    - Lower maintenance risk
+    - Keycloak remains vanilla
+- Retains full Keycloak OAuth2/OIDC feature set
+    - Authorization Code Flow
+    - Refresh tokens
+    - Token introspection
+    - Client scopes and protocol mappers
+    - Admin UI and auditing
+- Clear separation of responsibilities
+    - SSO Bridge: authentication, UX, LoginAPI integration
+    - Keycloak: brokering and authorization for applications
+- Easier future extensibility
+    - Add OTP, social login, or other methods in SSO Bridge
+    - No Keycloak internal changes needed
+- Portable identity layer
+    - SSO Bridge can remain even if Keycloak is replaced
+- Natural fit for `sub = user_id` at the IdP boundary
+    - SSO Bridge can issue ID tokens with `sub = LoginAPI user_id`
+#### Cons
+
+- Must implement and operate an OIDC Provider
+    - Authorization endpoint
+    - Token endpoint
+    - JWKS and signing keys
+    - State, nonce, and PKCE validation
+- More moving parts
+    - Two identity systems in the login path
+- Extra redirect hop
+    - Keycloak → SSO Bridge → Keycloak → Application
+- Token and claim mapping complexity
+    - Decide which claims originate from Bridge vs Keycloak
+    - Maintain consistent identity semantics
+- Increased operational responsibility
+    - Key management for Bridge
+    - Rate limiting, CSRF protection, audit logging
+    - Bridge availability directly impacts login
+- Dual session management
+    - SSO Bridge session
+    - Keycloak session
+    - Logout and SSO invalidation require coordination
+- Keycloak `sub` may still differ
+    - Bridge issues `sub = user_id`
+    - Keycloak may still use its own internal subject
+    - Often solved by standardizing on an explicit `user_id` claim
 ### Quick Decision Guide
 
-- Ship fast, OK with `sub != user_id`  
-  → Option A
-
-- `sub` must equal LoginAPI `user_id`  
-  → Option B
-
-- Avoid storing users in Keycloak DB  
-  → Option B (Import OFF)
-
-- Better admin UX, still external auth  
-  → Option B (Import ON)
-
-### Final
-
-Option A = simpler, faster, Keycloak stores users, sub = KC UUID  
-Option B = cleaner identity model, LoginAPI is user store, sub = user_id
+* Option A = simpler, faster, Keycloak stores users, sub = KC UUID  
+* Option B = cleaner identity model, LoginAPI is user store, sub = user_id
+* Option C = places all login UX and authentication logic in a dedicated SSO service, while Keycloak focuses purely on OAuth2/OIDC for applications.
 
 ## 🚀 Quick Start
 
