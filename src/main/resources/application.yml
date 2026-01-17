@@ -1,9 +1,15 @@
 spring:
   application:
     name: spring-boot-template
+  thymeleaf:
+    cache: false
 
 server:
-  port: 8080
+  port: 8081
+app:
+  issuer: http://localhost:8081
+  loginApiBaseUrl: http://localhost:8090
+
 
 management:
   endpoints:
